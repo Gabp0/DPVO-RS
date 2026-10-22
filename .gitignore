@@ -1,4 +1,10 @@
-a# Byte-compiled / optimized / DLL files
+movies/*
+*.pdf
+*.txt
+*.ply
+
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class

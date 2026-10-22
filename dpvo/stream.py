@@ -5,6 +5,33 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from itertools import chain
 
+def read_timestamps(imagedir, image_list):
+    """ timestamps [s] from a DSO-style times.txt, keyed by image filename
+
+    Returns None when no times.txt covers the images, in which case the caller
+    falls back to frame indices. """
+
+    for times_file in [Path(imagedir) / "times.txt", Path(imagedir).parent / "times.txt"]:
+        if times_file.exists():
+            break
+    else:
+        return None
+
+    tstamps = {}
+    for line in times_file.read_text().splitlines():
+        if line.startswith("#") or not line.split():
+            continue
+        stem, tstamp, *_ = line.split()
+        tstamps[stem] = float(tstamp)
+
+    missing = [f.stem for f in image_list if f.stem not in tstamps]
+    if missing:
+        print(f"{times_file} is missing {len(missing)} image(s), using frame indices")
+        return None
+
+    return [tstamps[f.stem] for f in image_list]
+
+
 def image_stream(queue, imagedir, calib, stride, skip=0):
     """ image generator """
 
@@ -21,6 +48,8 @@ def image_stream(queue, imagedir, calib, stride, skip=0):
     image_list = sorted(chain.from_iterable(Path(imagedir).glob(e) for e in img_exts))[skip::stride]
     assert os.path.exists(imagedir), imagedir
 
+    tstamps = read_timestamps(imagedir, image_list)
+
     for t, imfile in enumerate(image_list):
         image = cv2.imread(str(imfile))
         if len(calib) > 4:
@@ -36,7 +65,7 @@ def image_stream(queue, imagedir, calib, stride, skip=0):
         h, w, _ = image.shape
         image = image[:h-h%16, :w-w%16]
 
-        queue.put((t, image, intrinsics))
+        queue.put((t if tstamps is None else tstamps[t], image, intrinsics))
 
     queue.put((-1, image, intrinsics))
 
